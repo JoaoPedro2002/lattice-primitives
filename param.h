@@ -15,6 +15,15 @@
 #include <flint/fmpz_mod_poly.h>
 #include <string.h>
 
+#ifdef _WIN32
+#   define API __declspec(dllexport)
+#else
+#   define API
+#endif
+
+# ifdef SHARED
+extern "C" {
+# endif
 /*============================================================================*/
 /* Constant definitions                                                       */
 /*============================================================================*/
@@ -29,3 +38,7 @@
 #define SIGMA_C 54000
 // Standard deviation of discrete Gaussian
 #define SIGMA_E	54000
+
+# ifdef SHARED
+} // extern "C"
+# endif

@@ -22,15 +22,6 @@
 /* The second square root of -1. */
 #define P1		752843710
 
-/* Polynomial defining the cyclotomic ring. */
-static nmod_poly_t cyclo_poly;
-
-/* Pair of irreducible polynomials for CRT representation. */
-static pcrt_poly_t irred;
-
-/* Inverses of the irreducible polynomials for CRT reconstruction. */
-static pcrt_poly_t inv;
-
 /**
  * Test if the l2-norm is within bounds (4 * sigma * sqrt(N)).
  *
@@ -46,61 +37,68 @@ static int test_norm(nmod_poly_t r) {
 	sigma_sqr *= sigma_sqr * DEGREE * WIDTH;
 
 	// Compare to (4 * sigma * sqrt(N))^2 = 16 * sigma^2 * N.
-	return norm <= (uint64_t) 16 *sigma_sqr * DEGREE;
+	return norm <= (uint64_t) 16 * sigma_sqr * DEGREE;
 }
 
 /*============================================================================*/
 /* Public definitions                                                         */
 /*============================================================================*/
 
-// Initialize commitment scheme.
-void commit_setup() {
-	nmod_poly_init(cyclo_poly, MODP);
+// Initialize commitment_scheme scheme.
+void commit_scheme_init(commitment_scheme_t commitment_scheme) {
+	nmod_poly_init(commitment_scheme->cyclo_poly, MODP);
 	for (int i = 0; i < 2; i++) {
-		nmod_poly_init(irred[i], MODP);
-		nmod_poly_init(inv[i], MODP);
+		nmod_poly_init(commitment_scheme->irred[i], MODP);
+		nmod_poly_init(commitment_scheme->inv[i], MODP);
 	}
 
 	// Initialize polynomial as x^N + 1. */
-	nmod_poly_set_coeff_ui(cyclo_poly, DEGREE, 1);
-	nmod_poly_set_coeff_ui(cyclo_poly, 0, 1);
+	nmod_poly_set_coeff_ui(commitment_scheme->cyclo_poly, DEGREE, 1);
+	nmod_poly_set_coeff_ui(commitment_scheme->cyclo_poly, 0, 1);
 
 	// Initialize two factors of the polynomial for CRT representation.
-	nmod_poly_set_coeff_ui(irred[0], DEGCRT, 1);
-	nmod_poly_set_coeff_ui(irred[0], 0, 3153606543);
-	nmod_poly_set_coeff_ui(irred[1], DEGCRT, 1);
-	nmod_poly_set_coeff_ui(irred[1], 0, 752843710);
+	nmod_poly_set_coeff_ui(commitment_scheme->irred[0], DEGCRT, 1);
+	nmod_poly_set_coeff_ui(commitment_scheme->irred[0], 0, 3153606543);
+	nmod_poly_set_coeff_ui(commitment_scheme->irred[1], DEGCRT, 1);
+	nmod_poly_set_coeff_ui(commitment_scheme->irred[1], 0, 752843710);
 
-	nmod_poly_invmod(inv[0], irred[0], irred[1]);
-	nmod_poly_invmod(inv[1], irred[1], irred[0]);
-	nmod_poly_mul(inv[1], inv[1], irred[1]);
+	nmod_poly_invmod(commitment_scheme->inv[0], commitment_scheme->irred[0], commitment_scheme->irred[1]);
+	nmod_poly_invmod(commitment_scheme->inv[1], commitment_scheme->irred[1], commitment_scheme->irred[0]);
+	nmod_poly_mul(commitment_scheme->inv[1], commitment_scheme->inv[1], commitment_scheme->irred[1]);
 }
 
-// Finalize commitment scheme.
-void commit_finish() {
+// Finalize commitment_scheme scheme.
+void commit_scheme_finish(commitment_scheme_t commitment_scheme) {
 	for (int i = 0; i < 2; i++) {
-		nmod_poly_clear(irred[i]);
-		nmod_poly_clear(inv[i]);
+		nmod_poly_clear(commitment_scheme->irred[i]);
+		nmod_poly_clear(commitment_scheme->inv[i]);
 	}
-	nmod_poly_clear(cyclo_poly);
+	nmod_poly_clear(commitment_scheme->cyclo_poly);
 }
 
 // Return polynomial defining Rp.
-nmod_poly_t *commit_poly() {
-	return &cyclo_poly;
+nmod_poly_t *commit_poly(commitment_scheme_t commitment_scheme) {
+	return &commitment_scheme->cyclo_poly;
 }
 
 // Return irreducible polynomials defining CRT representation.
-nmod_poly_t *commit_irred(int i) {
-	return &irred[i];
+nmod_poly_t *commit_irred(commitment_scheme_t commitment_scheme, int i) {
+	return &commitment_scheme->irred[i];
 }
 
 // Recover polynomial from CRT representation.
-void pcrt_poly_rec(nmod_poly_t c, pcrt_poly_t a) {
+void pcrt_poly_rec(const commitment_scheme_t commitment, nmod_poly_t c, pcrt_poly_t a) {
 	nmod_poly_sub(c, a[0], a[1]);
-	nmod_poly_mul(c, c, inv[1]);
+	nmod_poly_mul(c, c, commitment->inv[1]);
 	nmod_poly_add(c, c, a[1]);
-	nmod_poly_rem(c, c, cyclo_poly);
+	nmod_poly_rem(c, c, commitment->cyclo_poly);
+}
+
+// Convert to polynomial from CRT representation.
+void pcrt_poly_conv(const commitment_scheme_t commitment_scheme, pcrt_poly_t c, const nmod_poly_t a) {
+    for (int i = 0; i < 2; ++i) {
+        nmod_poly_rem(c[i], a, commitment_scheme->irred[i]);
+    }
 }
 
 // Compute squared l2-norm.
@@ -198,13 +196,13 @@ void commit_sample_short(nmod_poly_t r) {
 }
 
 // Sample a short polynomial in CRT representation.
-void commit_sample_short_crt(pcrt_poly_t r) {
+void commit_sample_short_crt(commitment_scheme_t commitment_scheme, pcrt_poly_t r) {
 	nmod_poly_t t;
 
 	nmod_poly_init(t, MODP);
 	commit_sample_short(t);
 	for (int j = 0; j < 2; j++) {
-		nmod_poly_rem(r[j], t, irred[j]);
+		nmod_poly_rem(r[j], t, commitment_scheme->irred[j]);
 	}
 	nmod_poly_clear(t);
 }
@@ -220,13 +218,13 @@ void commit_sample_rand(nmod_poly_t r, flint_rand_t rand, int degree) {
 }
 
 // Sample a random polynomial in CRT representation.
-void commit_sample_rand_crt(pcrt_poly_t r, flint_rand_t rand) {
+void commit_sample_rand_crt(commitment_scheme_t commitment_scheme, pcrt_poly_t r, flint_rand_t rand) {
 	nmod_poly_t t;
 
 	nmod_poly_init(t, MODP);
 	commit_sample_rand(t, rand, DEGREE);
 	for (int i = 0; i < 2; i++) {
-		nmod_poly_rem(r[i], t, irred[i]);
+		nmod_poly_rem(r[i], t, commitment_scheme->irred[i]);
 	}
 	nmod_poly_clear(t);
 }
@@ -257,13 +255,13 @@ void commit_sample_chall(nmod_poly_t f) {
 }
 
 // Sample a challenge in CRT representation.
-void commit_sample_chall_crt(pcrt_poly_t f) {
+void commit_sample_chall_crt(commitment_scheme_t commitment, pcrt_poly_t f) {
 	nmod_poly_t t;
 
 	nmod_poly_init(t, MODP);
 	commit_sample_chall(t);
-	nmod_poly_rem(f[0], t, irred[0]);
-	nmod_poly_rem(f[1], t, irred[1]);
+	nmod_poly_rem(f[0], t, commitment->irred[0]);
+	nmod_poly_rem(f[1], t, commitment->irred[1]);
 	nmod_poly_clear(t);
 }
 
@@ -279,20 +277,20 @@ void commit_sample_gauss(nmod_poly_t r) {
 }
 
 // Sample a polynomial according to a Gaussian distribution in CRT rep.
-void commit_sample_gauss_crt(nmod_poly_t r[2]) {
+void commit_sample_gauss_crt(commitment_scheme_t commitment, nmod_poly_t r[2]) {
 	nmod_poly_t t;
 
 	nmod_poly_init(t, MODP);
 	commit_sample_gauss(t);
-	nmod_poly_rem(r[0], t, irred[0]);
-	nmod_poly_rem(r[1], t, irred[1]);
+	nmod_poly_rem(r[0], t, commitment->irred[0]);
+	nmod_poly_rem(r[1], t, commitment->irred[1]);
 
 	nmod_poly_clear(t);
 }
 
 // Commit to a message.
-void commit_doit(commit_t *com, nmod_poly_t m, commitkey_t *key,
-		pcrt_poly_t r[WIDTH]) {
+void commit_doit(commitment_scheme_t commitment, commit_t *com, nmod_poly_t m, commitkey_t *key,
+                 pcrt_poly_t r[WIDTH]) {
 	nmod_poly_t t;
 
 	nmod_poly_init(t, MODP);
@@ -307,10 +305,10 @@ void commit_doit(commit_t *com, nmod_poly_t m, commitkey_t *key,
 	for (int i = 0; i < HEIGHT; i++) {
 		for (int j = 0; j < WIDTH; j++) {
 			for (int k = 0; k < 2; k++) {
-				nmod_poly_mulmod(t, key->B1[i][j][k], r[j][k], irred[k]);
+				nmod_poly_mulmod(t, key->B1[i][j][k], r[j][k], commitment->irred[k]);
 				nmod_poly_add(com->c1[k], com->c1[k], t);
 				if (i == 0) {
-					nmod_poly_mulmod(t, key->b2[j][k], r[j][k], irred[k]);
+					nmod_poly_mulmod(t, key->b2[j][k], r[j][k], commitment->irred[k]);
 					nmod_poly_add(com->c2[k], com->c2[k], t);
 				}
 			}
@@ -319,7 +317,7 @@ void commit_doit(commit_t *com, nmod_poly_t m, commitkey_t *key,
 
 	// Convert m to CRT representation and accumulate.
 	for (int i = 0; i < 2; i++) {
-		nmod_poly_rem(t, m, irred[i]);
+		nmod_poly_rem(t, m, commitment->irred[i]);
 		nmod_poly_add(com->c2[i], com->c2[i], t);
 	}
 
@@ -327,8 +325,8 @@ void commit_doit(commit_t *com, nmod_poly_t m, commitkey_t *key,
 }
 
 // Open a commitment on a message, randomness, factor.
-int commit_open(commit_t *com, nmod_poly_t m, commitkey_t *key,
-		pcrt_poly_t r[WIDTH], pcrt_poly_t f) {
+int commit_open(commitment_scheme_t commitment, commit_t *com, nmod_poly_t m, commitkey_t *key,
+                pcrt_poly_t r[WIDTH], pcrt_poly_t f) {
 	nmod_poly_t t;
 	pcrt_poly_t c1, c2, _c1, _c2;
 	int result = 0;
@@ -347,10 +345,10 @@ int commit_open(commit_t *com, nmod_poly_t m, commitkey_t *key,
 	for (int i = 0; i < HEIGHT; i++) {
 		for (int j = 0; j < WIDTH; j++) {
 			for (int k = 0; k < 2; k++) {
-				nmod_poly_mulmod(t, key->B1[i][j][k], r[j][k], irred[k]);
+				nmod_poly_mulmod(t, key->B1[i][j][k], r[j][k], commitment->irred[k]);
 				nmod_poly_add(c1[k], c1[k], t);
 				if (i == 0) {
-					nmod_poly_mulmod(t, key->b2[j][k], r[j][k], irred[k]);
+					nmod_poly_mulmod(t, key->b2[j][k], r[j][k], commitment->irred[k]);
 					nmod_poly_add(c2[k], c2[k], t);
 				}
 			}
@@ -359,21 +357,21 @@ int commit_open(commit_t *com, nmod_poly_t m, commitkey_t *key,
 
 	// Convert m to CRT representation before multiplication.
 	for (int i = 0; i < 2; i++) {
-		nmod_poly_rem(t, m, irred[i]);
-		nmod_poly_mulmod(t, t, f[i], irred[i]);
+		nmod_poly_rem(t, m, commitment->irred[i]);
+		nmod_poly_mulmod(t, t, f[i], commitment->irred[i]);
 		nmod_poly_add(c2[i], c2[i], t);
 	}
 
 	for (int i = 0; i < 2; i++) {
-		nmod_poly_mulmod(_c1[i], com->c1[i], f[i], irred[i]);
-		nmod_poly_mulmod(_c2[i], com->c2[i], f[i], irred[i]);
+		nmod_poly_mulmod(_c1[i], com->c1[i], f[i], commitment->irred[i]);
+		nmod_poly_mulmod(_c2[i], com->c2[i], f[i], commitment->irred[i]);
 	}
 
-	pcrt_poly_rec(t, r[0]);
+	pcrt_poly_rec(commitment, t, r[0]);
 	if (test_norm(t)) {
-		pcrt_poly_rec(t, r[1]);
+		pcrt_poly_rec(commitment, t, r[1]);
 		if (test_norm(t)) {
-			pcrt_poly_rec(t, r[2]);
+			pcrt_poly_rec(commitment, t, r[2]);
 			if (test_norm(t)) {
 				if (nmod_poly_equal(_c1[0], c1[0]) &&
 						nmod_poly_equal(_c2[0], c2[0])) {
@@ -394,6 +392,55 @@ int commit_open(commit_t *com, nmod_poly_t m, commitkey_t *key,
 	return result;
 }
 
+int commit_message_rec(commitment_scheme_t commitment_scheme, nmod_poly_t message, commit_t *com, commitkey_t *key,
+                        pcrt_poly_t r[WIDTH]) {
+    nmod_poly_t t;
+    pcrt_poly_t c1, c2;
+
+    nmod_poly_init(t, MODP);
+    for (int i = 0; i < 2; i++) {
+        nmod_poly_init(c1[i], MODP);
+        nmod_poly_init(c2[i], MODP);
+        nmod_poly_zero(c1[i]);
+        nmod_poly_zero(c2[i]);
+    }
+
+    // Compute B = [ B1 b2 ] * r_m.
+    for (int i = 0; i < HEIGHT; i++) {
+        for (int j = 0; j < WIDTH; j++) {
+            for (int k = 0; k < 2; k++) {
+                nmod_poly_mulmod(t, key->B1[i][j][k], r[j][k], commitment_scheme->irred[k]);
+                nmod_poly_add(c1[k], c1[k], t);
+                if (i == 0) {
+                    nmod_poly_mulmod(t, key->b2[j][k], r[j][k], commitment_scheme->irred[k]);
+                    nmod_poly_add(c2[k], c2[k], t);
+                }
+            }
+        }
+    }
+
+    // compute [c1 c2] - B
+    for (int i = 0; i < 2; i++) {
+        nmod_poly_sub(c1[i], com->c1[i], c1[i]);
+        nmod_poly_sub(c2[i], com->c2[i], c2[i]);
+    }
+
+    pcrt_poly_rec(commitment_scheme, t, c1);
+    int is_zero = nmod_poly_is_zero(t);
+    if (!is_zero) {
+        return 0;
+    }
+
+    pcrt_poly_rec(commitment_scheme, message, c2);
+
+    nmod_poly_clear(t);
+    for (int i = 0; i < 2; i++) {
+        nmod_poly_clear(c1[i]);
+        nmod_poly_clear(c2[i]);
+    }
+    return 1;
+}
+
 // Free a commitment.
 void commit_free(commit_t *com) {
 	for (int i = 0; i < 2; i++) {
@@ -402,9 +449,17 @@ void commit_free(commit_t *com) {
 	}
 }
 
+commit_t *commit_ptr_init() {
+    return (commit_t *) malloc(sizeof(commit_t));
+}
+
+void commit_ptr_free(commit_t *com) {
+    free(com);
+}
+
 #ifdef MAIN
 // Tests and benchmarks below.
-static void test(flint_rand_t rand) {
+static void test(commitment_scheme_t commitment_scheme, flint_rand_t rand) {
 	commitkey_t key;
 	commit_t com, _com;
 	nmod_poly_t m, rho;
@@ -424,26 +479,26 @@ static void test(flint_rand_t rand) {
 	/* Generate a random message. */
 	nmod_poly_randtest(m, rand, DEGREE);
 
-	/* Generate commitment key. */
+	/* Generate commitment_scheme key. */
 	commit_keygen(&key, rand);
 	for (int i = 0; i < WIDTH; i++) {
-		commit_sample_short_crt(r[i]);
+		commit_sample_short_crt(commitment_scheme, r[i]);
 	}
 
-	TEST_BEGIN("commitment can be generated and opened") {
+	TEST_BEGIN("commitment_scheme can be generated and opened") {
 
-		commit_doit(&com, m, &key, r);
+		commit_doit(commitment_scheme, &com, m, &key, r);
 
-		commit_sample_chall_crt(f);
+		commit_sample_chall_crt(commitment_scheme, f);
 		commit_sample_chall(rho);
 
-		for (int i = 0; i < WIDTH; i++) {
-			for (int j = 0; j < 2; j++) {
-				nmod_poly_mulmod(s[i][j], r[i][j], f[j], irred[j]);
-			}
-		}
+        for (int i = 0; i < WIDTH; ++i) {
+            for (int j = 0; j < 2; ++j) {
+                nmod_poly_mulmod(s[i][j], r[i][j], f[j], commitment_scheme->irred[j]);
+            }
+        }
 
-		TEST_ASSERT(commit_open(&com, m, &key, s, f) == 1, end);
+		TEST_ASSERT(commit_open(commitment_scheme, &com, m, &key, s, f) == 1, end);
 	} TEST_END;
 
 	TEST_BEGIN("commitments are linearly homomorphic") {
@@ -453,13 +508,13 @@ static void test(flint_rand_t rand) {
 				nmod_poly_zero(r[i][j]);
 			}
 		}
-		commit_doit(&_com, rho, &key, r);
+		commit_doit(commitment_scheme, &_com, rho, &key, r);
 		for (int i = 0; i < 2; i++) {
 			nmod_poly_sub(com.c1[i], com.c1[i], _com.c1[i]);
 			nmod_poly_sub(com.c2[i], com.c2[i], _com.c2[i]);
 		}
 		nmod_poly_sub(m, m, rho);
-		TEST_ASSERT(commit_open(&com, m, &key, s, f) == 1, end);
+		TEST_ASSERT(commit_open(commitment_scheme, &com, m, &key, s, f) == 1, end);
 	} TEST_END;
 
   end:
@@ -477,7 +532,7 @@ static void test(flint_rand_t rand) {
 	}
 }
 
-static void bench(flint_rand_t rand) {
+static void bench(commitment_scheme_t commitment_scheme, flint_rand_t rand) {
 	commitkey_t key;
 	commit_t com;
 	nmod_poly_t m;
@@ -497,22 +552,22 @@ static void bench(flint_rand_t rand) {
 	nmod_poly_randtest(m, rand, DEGREE);
 
 	for (int i = 0; i < WIDTH; i++) {
-		commit_sample_short_crt(r[i]);
+		commit_sample_short_crt(commitment_scheme, r[i]);
 	}
 
 	BENCH_BEGIN("commit_sample") {
-		BENCH_ADD(commit_sample_short_crt(r[0]));
+		BENCH_ADD(commit_sample_short_crt(commitment_scheme, r[0]));
 	} BENCH_END;
 
 	BENCH_BEGIN("commit_doit") {
-		BENCH_ADD(commit_doit(&com, m, &key, r));
+		BENCH_ADD(commit_doit(commitment_scheme, &com, m, &key, r));
 		commit_free(&com);
 	} BENCH_END;
 
 	BENCH_BEGIN("commit_open") {
-		commit_sample_chall_crt(f);
-		commit_doit(&com, m, &key, r);
-		BENCH_ADD(commit_open(&com, m, &key, r, f));
+		commit_sample_chall_crt(commitment_scheme, f);
+		commit_doit(commitment_scheme, &com, m, &key, r);
+		BENCH_ADD(commit_open(commitment_scheme, &com, m, &key, r, f));
 	} BENCH_END;
 
 	commit_keyfree(&key);
@@ -528,7 +583,7 @@ static void bench(flint_rand_t rand) {
 	}
 }
 
-static void microbench(flint_rand_t rand) {
+static void microbench(commitment_scheme_t commitment_scheme, flint_rand_t rand) {
 	nmod_poly_t alpha, beta, t[2], u[2];
 
 	nmod_poly_init(alpha, MODP);
@@ -546,15 +601,15 @@ static void microbench(flint_rand_t rand) {
 	} BENCH_END;
 
 	BENCH_BEGIN("Polynomial multiplication") {
-		BENCH_ADD(nmod_poly_mulmod(alpha, alpha, beta, cyclo_poly));
+		BENCH_ADD(nmod_poly_mulmod(alpha, alpha, beta, commitment_scheme->cyclo_poly));
 	} BENCH_END;
 
-	commit_sample_rand_crt(t, rand);
-	commit_sample_rand_crt(u, rand);
+	commit_sample_rand_crt(commitment_scheme, t, rand);
+	commit_sample_rand_crt(commitment_scheme, u, rand);
 
 	BENCH_BEGIN("Polynomial mult in CRT form") {
-		BENCH_ADD(nmod_poly_mulmod(t[0], t[0], u[0], irred[0]));
-		BENCH_ADD(nmod_poly_mulmod(t[1], t[1], u[1], irred[1]));
+		BENCH_ADD(nmod_poly_mulmod(t[0], t[0], u[0], commitment_scheme->irred[0]));
+		BENCH_ADD(nmod_poly_mulmod(t[1], t[1], u[1], commitment_scheme->irred[1]));
 	} BENCH_END;
 
 nmod_poly_clear(alpha);
@@ -566,6 +621,7 @@ for (int i = 0; i < 2; i++) {
 }
 
 int main(int argc, char *arv[]) {
+    commitment_scheme_t commitment_scheme;
 	flint_rand_t rand;
 	uint64_t buf[2];
 
@@ -573,18 +629,18 @@ int main(int argc, char *arv[]) {
 	flint_randinit(rand);
 	flint_randseed(rand, buf[0], buf[1]);
 
-	commit_setup();
+    commit_scheme_init(commitment_scheme);
 
 	printf("\n** Tests for lattice-based commitments:\n\n");
-	test(rand);
+	test(commitment_scheme, rand);
 
 	printf("\n** Microbenchmarks for polynomial arithmetic:\n\n");
-	microbench(rand);
+	microbench(commitment_scheme, rand);
 
 	printf("\n** Benchmarks for lattice-based commitments:\n\n");
-	bench(rand);
+	bench(commitment_scheme, rand);
 
-	commit_finish();
+    commit_scheme_finish(commitment_scheme);
 	flint_randclear(rand);
 }
 #endif
