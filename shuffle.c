@@ -503,7 +503,7 @@ void lin_prover(nmod_poly_t y[WIDTH][2], nmod_poly_t _y[WIDTH][2],
 int lin_verifier(nmod_poly_t y[WIDTH][2], nmod_poly_t _y[WIDTH][2],
 		nmod_poly_t t[2], nmod_poly_t _t[2], nmod_poly_t u[2], commitment_scheme_t commitment_scheme,
 		commit_t com, commit_t x, commitkey_t *key,
-		nmod_poly_t alpha, nmod_poly_t beta, int l) {
+		nmod_poly_t alpha, nmod_poly_t beta, int l, int len) {
 	nmod_poly_t tmp, _d[2], v[2], _v[2], z[WIDTH], _z[WIDTH];
 	int result = 1;
 
@@ -565,7 +565,7 @@ int lin_verifier(nmod_poly_t y[WIDTH][2], nmod_poly_t _y[WIDTH][2],
 			nmod_poly_rem(t[j], t[j], *commit_irred(commitment_scheme, j));
 		}
 	}
-	if (l > 0 && l < MSGS - 1) {
+	if (l > 0 && l < len - 1) {
 		for (int j = 0; j < 2; j++) {
 			nmod_poly_mulmod(t[j], alpha, com.c2[j], *commit_irred(commitment_scheme, j));
 			nmod_poly_add(t[j], t[j], beta);
@@ -574,10 +574,10 @@ int lin_verifier(nmod_poly_t y[WIDTH][2], nmod_poly_t _y[WIDTH][2],
 			nmod_poly_add(t[j], t[j], u[j]);
 		}
 	}
-	if (l == MSGS - 1) {
+	if (l == len - 1) {
 		for (int j = 0; j < 2; j++) {
 			nmod_poly_mulmod(t[j], alpha, com.c2[j], *commit_irred(commitment_scheme, j));
-			if (MSGS & 1) {
+			if (len & 1) {
 				nmod_poly_sub(t[j], t[j], beta);
 			} else {
 				nmod_poly_add(t[j], t[j], beta);
@@ -616,8 +616,8 @@ int lin_verifier(nmod_poly_t y[WIDTH][2], nmod_poly_t _y[WIDTH][2],
 	return result;
 }
 
-void shuffle_hash(nmod_poly_t beta, commit_t *c[MSGS], commit_t d[MSGS],
-		nmod_poly_t _m[MSGS], nmod_poly_t rho) {
+void shuffle_hash(nmod_poly_t beta, commit_t **c, commit_t *d,
+		nmod_poly_t *_m, nmod_poly_t rho, int len) {
 	flint_rand_t rand;
 	SHA256Context sha;
 	uint8_t hash[SHA256HashSize];
@@ -625,7 +625,7 @@ void shuffle_hash(nmod_poly_t beta, commit_t *c[MSGS], commit_t d[MSGS],
 
 	SHA256Reset(&sha);
 
-	for (int i = 0; i < MSGS; i++) {
+	for (int i = 0; i < len; i++) {
 		SHA256Input(&sha, (const uint8_t *)_m[i]->coeffs,
 				_m[i]->alloc * sizeof(uint64_t));
 		for (int j = 0; j < 2; j++) {
@@ -655,18 +655,17 @@ void shuffle_hash(nmod_poly_t beta, commit_t *c[MSGS], commit_t d[MSGS],
 	flint_randclear(rand);
 }
 
-void shuffle_prover(nmod_poly_t y[MSGS][WIDTH][2],
-		nmod_poly_t _y[MSGS][WIDTH][2], nmod_poly_t t[MSGS][2],
-		nmod_poly_t _t[MSGS][2], nmod_poly_t u[MSGS][2], commitment_scheme_t commitment_scheme,
-        commit_t d[MSGS], nmod_poly_t s[MSGS], commit_t *com[MSGS], nmod_poly_t m[MSGS],
-		nmod_poly_t _m[MSGS], nmod_poly_t r[MSGS][WIDTH][2], nmod_poly_t rho,
-		commitkey_t *key, flint_rand_t rng) {
-	nmod_poly_t beta, t0, t1, theta[MSGS], _r[MSGS][WIDTH][2];
+void shuffle_prover(opening_t *y, opening_t *_y, pcrt_poly_t *t,
+		pcrt_poly_t *_t, pcrt_poly_t *u, commitment_scheme_t commitment_scheme,
+        commit_t *d, nmod_poly_t *s, commit_t **com, nmod_poly_t *m,
+		nmod_poly_t *_m, opening_t *r, nmod_poly_t rho,
+		commitkey_t *key, flint_rand_t rng, int len) {
+	nmod_poly_t beta, t0, t1, theta[len], _r[len][WIDTH][2];
 
 	nmod_poly_init(t0, MODP);
 	nmod_poly_init(t1, MODP);
 	nmod_poly_init(beta, MODP);
-	for (int i = 0; i < MSGS; i++) {
+	for (int i = 0; i < len; i++) {
 		nmod_poly_init(theta[i], MODP);
 		for (int k = 0; k < 2; k++) {
 			for (int j = 0; j < WIDTH; j++) {
@@ -676,7 +675,7 @@ void shuffle_prover(nmod_poly_t y[MSGS][WIDTH][2],
 	}
 
 	/* Prover shifts the messages by rho. */
-	for (int i = 0; i < MSGS; i++) {
+	for (int i = 0; i < len; i++) {
 		nmod_poly_sub(m[i], m[i], rho);
 		nmod_poly_sub(_m[i], _m[i], rho);
 	}
@@ -689,7 +688,7 @@ void shuffle_prover(nmod_poly_t y[MSGS][WIDTH][2],
 	}
 
 	commit_doit(commitment_scheme, &d[0], t0, key, _r[0]);
-	for (int i = 1; i < MSGS - 1; i++) {
+	for (int i = 1; i < len - 1; i++) {
 		commit_sample_rand(theta[i], rng, DEGREE);
 		nmod_poly_mulmod(t0, theta[i - 1], m[i], commitment_scheme->cyclo_poly);
 		nmod_poly_mulmod(t1, theta[i], _m[i], commitment_scheme->cyclo_poly);
@@ -699,19 +698,19 @@ void shuffle_prover(nmod_poly_t y[MSGS][WIDTH][2],
 		}
 		commit_doit(commitment_scheme, &d[i], t0, key, _r[i]);
 	}
-	nmod_poly_mulmod(t0, theta[MSGS - 2], m[MSGS - 1], commitment_scheme->cyclo_poly);
+	nmod_poly_mulmod(t0, theta[len - 2], m[len - 1], commitment_scheme->cyclo_poly);
 	for (int j = 0; j < WIDTH; j++) {
-		commit_sample_short_crt(commitment_scheme, _r[MSGS - 1][j]);
+		commit_sample_short_crt(commitment_scheme, _r[len - 1][j]);
 	}
-	commit_doit(commitment_scheme, &d[MSGS - 1], t0, key, _r[MSGS - 1]);
+	commit_doit(commitment_scheme, &d[len - 1], t0, key, _r[len - 1]);
 
-	shuffle_hash(beta, com, d, _m, rho);
+	shuffle_hash(beta, com, d, _m, rho, len);
 	nmod_poly_mulmod(s[0], theta[0], _m[0], commitment_scheme->cyclo_poly);
 	nmod_poly_mulmod(t0, beta, m[0], commitment_scheme->cyclo_poly);
 	nmod_poly_sub(s[0], s[0], t0);
 	nmod_poly_invmod(t0, _m[0], commitment_scheme->cyclo_poly);
 	nmod_poly_mulmod(s[0], s[0], t0, commitment_scheme->cyclo_poly);
-	for (int i = 1; i < MSGS - 1; i++) {
+	for (int i = 1; i < len - 1; i++) {
 		nmod_poly_mulmod(s[i], theta[i - 1], m[i], commitment_scheme->cyclo_poly);
 		nmod_poly_mulmod(t0, theta[i], _m[i], commitment_scheme->cyclo_poly);
 		nmod_poly_add(s[i], s[i], t0);
@@ -721,8 +720,8 @@ void shuffle_prover(nmod_poly_t y[MSGS][WIDTH][2],
 		nmod_poly_mulmod(s[i], s[i], t0, commitment_scheme->cyclo_poly);
 	}
 
-	for (int l = 0; l < MSGS; l++) {
-		if (l < MSGS - 1) {
+	for (int l = 0; l < len; l++) {
+		if (l < len - 1) {
 			nmod_poly_mulmod(t0, s[l], _m[l], commitment_scheme->cyclo_poly);
 		} else {
 			nmod_poly_mulmod(t0, beta, _m[l], commitment_scheme->cyclo_poly);
@@ -740,7 +739,7 @@ void shuffle_prover(nmod_poly_t y[MSGS][WIDTH][2],
 	nmod_poly_clear(t0);
 	nmod_poly_clear(t1);
 	nmod_poly_clear(beta);
-	for (int i = 0; i < MSGS; i++) {
+	for (int i = 0; i < len; i++) {
 		nmod_poly_clear(theta[i]);
 		for (int k = 0; k < 2; k++) {
 			for (int j = 0; j < WIDTH; j++) {
@@ -750,21 +749,20 @@ void shuffle_prover(nmod_poly_t y[MSGS][WIDTH][2],
 	}
 }
 
-int shuffle_verifier(nmod_poly_t y[MSGS][WIDTH][2],
-		nmod_poly_t _y[MSGS][WIDTH][2], nmod_poly_t t[MSGS][2],
-		nmod_poly_t _t[MSGS][2], nmod_poly_t u[MSGS][2], commitment_scheme_t commitment_scheme,
-        commit_t d[MSGS], nmod_poly_t s[MSGS], commit_t *com[MSGS], nmod_poly_t _m[MSGS],
-		nmod_poly_t rho, commitkey_t *key) {
+int shuffle_verifier(opening_t *y, opening_t *_y, pcrt_poly_t *t,
+		pcrt_poly_t *_t, pcrt_poly_t *u, commitment_scheme_t commitment_scheme,
+        commit_t *d, nmod_poly_t *s, commit_t **com, nmod_poly_t *_m,
+		nmod_poly_t rho, commitkey_t *key, int len) {
 	int result = 1;
 	nmod_poly_t beta, t0;
 
 	nmod_poly_init(t0, MODP);
 	nmod_poly_init(beta, MODP);
 
-	shuffle_hash(beta, com, d, _m, rho);
+	shuffle_hash(beta, com, d, _m, rho, len);
 	/* Now verify each \Prod_LIN instance, one for each commitment. */
-	for (int l = 0; l < MSGS; l++) {
-		if (l < MSGS - 1) {
+	for (int l = 0; l < len; l++) {
+		if (l < len - 1) {
 			nmod_poly_mulmod(t0, s[l], _m[l], commitment_scheme->cyclo_poly);
 		} else {
 			nmod_poly_mulmod(t0, beta, _m[l], commitment_scheme->cyclo_poly);
@@ -773,11 +771,11 @@ int shuffle_verifier(nmod_poly_t y[MSGS][WIDTH][2],
 		if (l == 0) {
 			result &=
 					lin_verifier(y[l], _y[l], t[l], _t[l], u[l], commitment_scheme, com[l][0], d[l],
-					key, beta, t0, l);
+					key, beta, t0, l, len);
 		} else {
 			result &=
 					lin_verifier(y[l], _y[l], t[l], _t[l], u[l], commitment_scheme, com[l][0], d[l],
-					key, s[l - 1], t0, l);
+					key, s[l - 1], t0, l, len);
 		}
 	}
 
@@ -786,17 +784,17 @@ int shuffle_verifier(nmod_poly_t y[MSGS][WIDTH][2],
 	return result;
 }
 
-int shuffle_run(commitment_scheme_t commitment_scheme, commit_t *com[MSGS], nmod_poly_t m[MSGS],
-                nmod_poly_t _m[MSGS], nmod_poly_t r[MSGS][WIDTH][2], commitkey_t *key, flint_rand_t rng) {
-	int flag, result = 1;
-	commit_t d[MSGS];
-	nmod_poly_t t0, t1, rho, s[MSGS], u[MSGS][2];
-	nmod_poly_t y[MSGS][WIDTH][2], _y[MSGS][WIDTH][2], t[MSGS][2], _t[MSGS][2];
+int shuffle_run(commitment_scheme_t commitment_scheme, commit_t **com, nmod_poly_t *m,
+                nmod_poly_t *_m, opening_t *r, commitkey_t *key, flint_rand_t rng, int len) {
+	int flag, result;
+	commit_t d[len];
+	nmod_poly_t t0, t1, rho, s[len], u[len][2];
+	nmod_poly_t y[len][WIDTH][2], _y[len][WIDTH][2], t[len][2], _t[len][2];
 
 	nmod_poly_init(t0, MODP);
 	nmod_poly_init(t1, MODP);
 	nmod_poly_init(rho, MODP);
-	for (int i = 0; i < MSGS; i++) {
+	for (int i = 0; i < len; i++) {
 		nmod_poly_init(s[i], MODP);
 		for (int k = 0; k < 2; k++) {
 			nmod_poly_init(t[i][k], MODP);
@@ -813,7 +811,7 @@ int shuffle_run(commitment_scheme_t commitment_scheme, commit_t *com[MSGS], nmod
 	do {
 		flag = 1;
 		commit_sample_rand(rho, rng, DEGREE);
-		for (int i = 0; i < MSGS; i++) {
+		for (int i = 0; i < len; i++) {
 			if (nmod_poly_equal(rho, _m[i]) == 1) {
 				flag = 0;
 			}
@@ -823,19 +821,19 @@ int shuffle_run(commitment_scheme_t commitment_scheme, commit_t *com[MSGS], nmod
 	/* Verifier shifts the commitments by rho. */
 	nmod_poly_rem(t0, rho, *commit_irred(commitment_scheme, 0));
 	nmod_poly_rem(t1, rho, *commit_irred(commitment_scheme, 1));
-	for (int i = 0; i < MSGS; i++) {
+	for (int i = 0; i < len; i++) {
 		nmod_poly_sub(com[i]->c2[0], com[i]->c2[0], t0);
 		nmod_poly_sub(com[i]->c2[1], com[i]->c2[1], t1);
 	}
 
-	shuffle_prover(y, _y, t, _t, u, commitment_scheme, d, s, com, m, _m, r, rho, key, rng);
+	shuffle_prover(y, _y, t, _t, u, commitment_scheme, d, s, com, m, _m, r, rho, key, rng, len);
 
-	result = shuffle_verifier(y, _y, t, _t, u, commitment_scheme, d, s, com, _m, rho, key);
+	result = shuffle_verifier(y, _y, t, _t, u, commitment_scheme, d, s, com, _m, rho, key, len);
 
 	nmod_poly_clear(t0);
 	nmod_poly_clear(t1);
 	nmod_poly_clear(rho);
-	for (int i = 0; i < MSGS; i++) {
+	for (int i = 0; i < len; i++) {
 		nmod_poly_clear(s[i]);
 		for (int k = 0; k < 2; k++) {
 			nmod_poly_clear(t[i][k]);
@@ -892,7 +890,7 @@ static void test(flint_rand_t rand) {
 	}
 
 	TEST_ONCE("shuffle proof is consistent") {
-		TEST_ASSERT(shuffle_run(commitment_scheme, com, m, _m, r, &key, rand) == 1, end);
+		TEST_ASSERT(shuffle_run(commitment_scheme, com, m, _m, r, &key, rand, MSGS) == 1, end);
 	} TEST_END;
 
   end:
@@ -958,7 +956,7 @@ static void bench(flint_rand_t rand) {
 	}
 
 	BENCH_BEGIN("shuffle-proof (N messages)") {
-		BENCH_ADD(shuffle_run(commitment_scheme, com, m, _m, r, &key, rand));
+		BENCH_ADD(shuffle_run(commitment_scheme, com, m, _m, r, &key, rand, MSGS));
 	} BENCH_END;
 
 	for (int i = 0; i < 2; i++) {
@@ -990,7 +988,7 @@ static void bench(flint_rand_t rand) {
 
 	BENCH_BEGIN("linear verifier") {
 		BENCH_ADD(lin_verifier(y, _y, t, _t, u, commitment_scheme, com[0][0], com[1][0], &key, alpha,
-						beta, 0));
+						beta, 0, MSGS));
 	} BENCH_END;
 
     commit_scheme_finish(commitment_scheme);
