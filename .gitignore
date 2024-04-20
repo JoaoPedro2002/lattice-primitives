@@ -1,0 +1,9 @@
+.idea
+
+# Compiled source #
+*.o
+*.so
+commit
+encrypt
+shuffle
+vericrypt

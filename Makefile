@@ -22,7 +22,11 @@ vericrypt: vericrypt.c encrypt.c ${TEST} ${BENCH} ${INCLUDES} gaussian_ct.cpp
 
 shuffle: shuffle.c commit.c ${TEST} ${BENCH}
 	${CPP} ${CFLAGS} -DSIGMA_PARAM=SIGMA_C -c gaussian_ct.cpp -o gaussian.o
-	${CPP} ${CFLAGS} commit.c shuffle.c sha224-256.c ${GAUSSIAN} ${TEST} ${BENCH} -o shuffle ${LIBS}
+	${CPP} ${CFLAGS} -c commit.c -o commit.o
+	${CPP} ${CFLAGS} -DMAIN shuffle.c commit.o sha224-256.c ${GAUSSIAN} ${TEST} ${BENCH} -o shuffle ${LIBS}
 
+shared-lib: commit.c encrypt.c utils.c vericrypt.c shuffle.c ${INCLUDES} gaussian_ct.cpp
+	${CPP} ${CFLAGS} -DSIGMA_PARAM=SIGMA_C -c gaussian_ct.cpp -o gaussian.o
+	${CPP} ${CFLAGS} -DSHARED -fPIC -shared commit.c encrypt.c utils.c vericrypt.c shuffle.c sha224-256.c ${GAUSSIAN} -o shared_lib.so ${LIBS}
 clean:
 	rm *.o commit encrypt vericrypt shuffle
