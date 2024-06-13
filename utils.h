@@ -36,6 +36,16 @@ extern "C" {
 
     void utils_pretty_print_fmpz_poly(fmpz_mod_poly_t p, fmpz_mod_ctx_t ctx);
 
+    char *utils_nmod_poly_to_string(nmod_poly_t p);
+
+    char *utils_fmpz_mod_poly_to_string(fmpz_mod_poly_t p, fmpz_mod_ctx_t ctx);
+
+    void utils_nmod_poly_from_string(nmod_poly_t p, char *str);
+
+    void utils_fmpz_mod_poly_from_string(fmpz_mod_poly_t p, char *str);
+
+    void utils_flint_free(void *ptr);
+
 # ifdef SHARED
 } // extern "C"
 # endif
