@@ -20,10 +20,15 @@ vericrypt: vericrypt.c encrypt.c ${TEST} ${BENCH} ${INCLUDES} gaussian_ct.cpp
 	${CPP} ${CFLAGS} -c encrypt.c -o encrypt.o
 	${CPP} ${CFLAGS} -DMAIN vericrypt.c encrypt.o sha224-256.c ${GAUSSIAN} ${TEST} ${BENCH} -o vericrypt ${LIBS}
 
-shuffle: shuffle.c commit.c ${TEST} ${BENCH}
+shuffle: shuffle.c commit.c ${TEST} ${BENCH} shuffle.h
 	${CPP} ${CFLAGS} -DSIGMA_PARAM=SIGMA_C -c gaussian_ct.cpp -o gaussian.o
 	${CPP} ${CFLAGS} -c commit.c -o commit.o
 	${CPP} ${CFLAGS} -DMAIN shuffle.c commit.o sha224-256.c ${GAUSSIAN} ${TEST} ${BENCH} -o shuffle ${LIBS}
+
+sum: sum.c commit.c ${TEST} ${BENCH}
+	${CPP} ${CFLAGS} -DSIGMA_PARAM=SIGMA_C -c gaussian_ct.cpp -o gaussian.o
+	${CPP} ${CFLAGS} -c commit.c -o commit.o
+	${CPP} ${CFLAGS} -DMAIN sum.c commit.o sha224-256.c ${GAUSSIAN} ${TEST} ${BENCH} -o sum ${LIBS}
 
 shared-lib: commit.c encrypt.c utils.c vericrypt.c shuffle.c ${INCLUDES} gaussian_ct.cpp
 	${CPP} ${CFLAGS} -DSIGMA_PARAM=SIGMA_C -c gaussian_ct.cpp -o gaussian.o

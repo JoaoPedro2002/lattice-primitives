@@ -660,7 +660,9 @@ void shuffle_prover(opening_t *y, opening_t *_y, pcrt_poly_t *t,
         commit_t *d, nmod_poly_t *s, commit_t **com, nmod_poly_t *m,
 		nmod_poly_t *_m, opening_t *r, nmod_poly_t rho,
 		commitkey_t *key, flint_rand_t rng, int len) {
-	nmod_poly_t beta, t0, t1, theta[len], _r[len][WIDTH][2];
+	nmod_poly_t beta, t0, t1;
+    nmod_poly_t *theta = (nmod_poly_t *)flint_malloc(len * sizeof(nmod_poly_t));
+    opening_t *_r = (opening_t *)flint_malloc(len * sizeof(opening_t));
 
 	nmod_poly_init(t0, MODP);
 	nmod_poly_init(t1, MODP);
@@ -747,6 +749,8 @@ void shuffle_prover(opening_t *y, opening_t *_y, pcrt_poly_t *t,
 			}
 		}
 	}
+    flint_free(theta);
+    flint_free(_r);
 }
 
 int shuffle_verifier(opening_t *y, opening_t *_y, pcrt_poly_t *t,
@@ -788,8 +792,14 @@ int shuffle_run(commitment_scheme_t commitment_scheme, commit_t **com, nmod_poly
                 nmod_poly_t *_m, opening_t *r, commitkey_t *key, flint_rand_t rng, int len) {
 	int flag, result;
 	commit_t d[len];
-	nmod_poly_t t0, t1, rho, s[len], u[len][2];
-	nmod_poly_t y[len][WIDTH][2], _y[len][WIDTH][2], t[len][2], _t[len][2];
+	nmod_poly_t t0, t1, rho;
+    nmod_poly_t *s = (nmod_poly_t *)flint_malloc(len * sizeof(nmod_poly_t));
+    pcrt_poly_t *u = (pcrt_poly_t *)flint_malloc(len * sizeof(pcrt_poly_t));
+
+    opening_t *y = (opening_t *)flint_malloc(len * sizeof(opening_t));
+    opening_t *_y = (opening_t *)flint_malloc(len * sizeof(opening_t));
+    pcrt_poly_t *t = (pcrt_poly_t *)flint_malloc(len * sizeof(pcrt_poly_t));
+    pcrt_poly_t *_t = (pcrt_poly_t *)flint_malloc(len * sizeof(pcrt_poly_t));
 
 	nmod_poly_init(t0, MODP);
 	nmod_poly_init(t1, MODP);
@@ -845,6 +855,13 @@ int shuffle_run(commitment_scheme_t commitment_scheme, commit_t **com, nmod_poly
 			}
 		}
 	}
+
+    flint_free(s);
+    flint_free(u);
+    flint_free(y);
+    flint_free(_y);
+    flint_free(t);
+    flint_free(_t);
 
 	return result;
 }
@@ -1037,4 +1054,22 @@ int main(int argc, char *argv[]) {
 	flint_randclear(rand);
 }
 
+#endif
+
+# ifdef SHARED
+opening_t * malloc_opening(size_t len) {
+    return (opening_t *)flint_malloc(len * sizeof(opening_t));
+}
+
+pcrt_poly_t * malloc_pcrt_poly(size_t len) {
+    return (pcrt_poly_t *)flint_malloc(len * sizeof(pcrt_poly_t));
+}
+
+nmod_poly_t * malloc_poly(size_t len) {
+    return (nmod_poly_t *)flint_malloc(len * sizeof(nmod_poly_t));
+}
+
+commit_t * malloc_commit(size_t len) {
+    return (commit_t *)flint_malloc(len * sizeof(commit_t));
+}
 #endif

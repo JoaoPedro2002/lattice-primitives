@@ -9,7 +9,7 @@
 # ifdef SHARED
 extern "C" {
 # endif
-#define MSGS        25
+#define MSGS        10000
 
 typedef pcrt_poly_t opening_t[WIDTH];
 
@@ -50,5 +50,13 @@ int shuffle_verifier(opening_t *y, opening_t *_y, pcrt_poly_t *t,
                      nmod_poly_t rho, commitkey_t *key, int len);
 
 # ifdef SHARED
+opening_t * malloc_opening(size_t len);
+
+pcrt_poly_t * malloc_pcrt_poly(size_t len);
+
+nmod_poly_t * malloc_poly(size_t len);
+
+commit_t * malloc_commit(size_t len);
+
 } // extern "C"
 # endif
