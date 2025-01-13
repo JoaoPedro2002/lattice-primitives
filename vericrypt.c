@@ -196,9 +196,10 @@ void vericrypt_sample_gauss(fmpz_mod_poly_t r, fmpz_mod_ctx_t *ctx) {
 	fmpz_init(t);
 	fmpz_mod_poly_zero(r, *ctx);
 	fmpz_mod_poly_fit_length(r, DEGREE, *ctx);
+    int64_t samples[DEGREE];
+    discrete_gaussian_vec(samples, 0.0, DEGREE);
 	for (int i = 0; i < DEGREE; i++) {
-		int64_t sample = discrete_gaussian(0.0);
-		fmpz_set_si(t, sample);
+		fmpz_set_si(t, samples[i]);
 		fmpz_mod_poly_set_coeff_fmpz(r, i, t, *ctx);
 	}
 	fmpz_clear(coeff);

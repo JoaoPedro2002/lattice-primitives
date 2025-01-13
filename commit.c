@@ -267,9 +267,10 @@ void commit_sample_chall_crt(commitment_scheme_t commitment, pcrt_poly_t f) {
 
 // Sample a polynomial according to a Gaussian distribution.
 void commit_sample_gauss(nmod_poly_t r) {
-	int64_t coeff;
+	int64_t coeffs[DEGREE];
+    discrete_gaussian_vec(coeffs, 0.0, DEGREE);
 	for (int i = 0; i < DEGREE; i++) {
-		coeff = discrete_gaussian(0.0);
+		int64_t coeff = coeffs[i];
 		if (coeff < 0)
 			coeff += MODP;
 		nmod_poly_set_coeff_ui(r, i, coeff);

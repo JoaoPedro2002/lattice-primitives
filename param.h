@@ -9,7 +9,8 @@
  * @ingroup evoting
  */
 
- #include <sys/random.h>
+#include "stddef.h"
+#include <sys/random.h>
 #include <stdint.h>
 #include <flint/flint.h>
 #include <flint/fmpz_mod_poly.h>

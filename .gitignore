@@ -6,4 +6,11 @@
 commit
 encrypt
 shuffle
+sum
 vericrypt
+
+*.js
+*.wasm
+
+compile-wasm/build
+compile-wasm/output

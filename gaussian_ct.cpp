@@ -231,6 +231,12 @@ int64_t discrete_gaussian(const double center)
 	}
 }
 
+void discrete_gaussian_vec(int64_t* samples, const double center, const size_t size) {
+    for (size_t i = 0; i < size; i++) {
+        samples[i] = discrete_gaussian(center);
+    }
+}
+
 #ifdef MAIN
 int main()
 {
