@@ -15,6 +15,7 @@
 #include <flint/flint.h>
 #include <flint/fmpz_mod_poly.h>
 #include <string.h>
+#include "gmp.h"
 
 #ifdef _WIN32
 #   define API __declspec(dllexport)
